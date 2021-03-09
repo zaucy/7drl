@@ -3,7 +3,7 @@ load("@rules_cc//cc:defs.bzl", "cc_binary")
 cc_binary(
     name = "game",
     visibility = ["//visibility:public"],
-    srcs = ["main.cpp"],
+    srcs = glob(["*.cpp", "*.h"]),
     deps = [
         "//librl",
         "@bazelregistry_sdl12//:SDL",

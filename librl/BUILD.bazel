@@ -4,6 +4,6 @@ cc_library(
     name = "librl",
     visibility = ["//visibility:public"],
     strip_include_prefix = ".",
-    srcs = glob(["*.c"]),
+    srcs = glob(["*.cpp", "*.h"]),
     hdrs = glob(["*.h"]),
 )
