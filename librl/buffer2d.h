@@ -3,42 +3,45 @@
 #include <cassert>
 #include <memory>
 
+#include "common.h"
 
 namespace librl {
 
-struct map_t {
-  
-  enum {
-    mask_solid = 0x80,
-  };
+struct buffer2d_t {
 
-  map_t(const uint32_t w, const uint32_t h)
+  typedef uint8_t type_t;
+
+  buffer2d_t(const uint32_t w, const uint32_t h)
     : width(w)
     , height(h)
-    , data(new uint8_t[w * h])
+    , data(new type_t[w * h])
   {
   }
 
-  map_t(const map_t &m)
+  buffer2d_t(const buffer2d_t &m)
     : width(m.width)
     , height(m.height)
-    , data(new uint8_t[m.width * m.height])
+    , data(new type_t[m.width * m.height])
   {
     memcpy(data.get(), m.data.get(), width * height);
   }
 
-  uint8_t &get(uint32_t x, uint32_t y) {
+  type_t &get(uint32_t x, uint32_t y) {
     assert(x < width && y < height);
     return data[x + y * width];
   }
 
-  const uint8_t &get(uint32_t x, uint32_t y) const {
+  const type_t &get(uint32_t x, uint32_t y) const {
     assert(x < width && y < height);
     return data[x + y * width];
   }
 
-  bool is_solid(uint32_t x, uint32_t y) const {
-    return (get(x, y) & mask_solid) != 0;
+  type_t &get(const int2 &p) {
+    return get(p.x, p.y);
+  }
+
+  const type_t &get(const int2 &p) const {
+    return get(p.x, p.y);
   }
 
   void clear(uint8_t tile) {
@@ -48,7 +51,7 @@ struct map_t {
   const uint32_t width, height;
 
 protected:
-  std::unique_ptr<uint8_t []> data;
+  std::unique_ptr<type_t[]> data;
 };
 
 }  // namespace librl

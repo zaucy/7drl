@@ -1,10 +1,8 @@
 #pragma once
-
 #include <cassert>
 #include <functional>
 #include <list>
 #include <set>
-
 
 namespace librl {
 
@@ -16,7 +14,9 @@ struct gc_base_t {
   virtual ~gc_base_t() {}
 protected:
   friend struct gc_t;
-  virtual void _enumerate(gc_enum_t &func) = 0;
+  virtual void _enumerate(gc_enum_t &func) {
+    // dummy
+  }
 };
 
 struct gc_t {
@@ -51,6 +51,17 @@ struct gc_t {
   // return the number of allocations
   size_t num_allocs() const {
     return _allocs.size();
+  }
+
+  // clear all previous allocations
+  void clear() {
+    for (auto &a : _allocs) {
+      delete a;
+    }
+    _allocs.clear();
+    _valid.clear();
+    _mark.clear();
+    persist.clear();
   }
 
   // persistant objects
