@@ -43,33 +43,15 @@ struct game_t {
 
   game_t()
     : player(nullptr)
+    , level(1)
     , seed(12345)
     , generate_new_map(false)
   {
   }
 
-  void map_create(uint32_t w, uint32_t h) {
-    // clear the old map entities entirely
-    entities.clear();
+  void map_create(uint32_t w, uint32_t h);
 
-    map.reset(new buffer2d_t(w, h));
-    // run the map generator
-    if (generator) {
-      generator->generate();
-    }
-
-    // XXX: FIXME
-    const uint8_t wall_tile = 1;
-
-    // create a potential field
-    pfield.reset(new pfield_t(*map, wall_tile));
-
-    fog.reset(new bitset2d_t(map->width, map->height));
-
-    render();
-  }
-
-  buffer2d_t &map_get() {
+  buffer2d_u8_t &map_get() {
     assert(map);
     return *map;
   }
@@ -78,11 +60,17 @@ struct game_t {
 
   void console_create(uint32_t w, uint32_t h) {
     console.reset(new console_t(w, h));
+    console->fill(' ');
   }
 
   console_t &console_get() {
     assert(console);
     return *console;
+  }
+
+  bitset2d_t &walls_get() {
+    assert(walls);
+    return *walls;
   }
 
   entity_t *entity_add(entity_t *ent) {
@@ -154,6 +142,7 @@ struct game_t {
 
   void map_next() {
     generate_new_map = true;
+    ++level;
   }
 
   gc_t gc;
@@ -163,17 +152,23 @@ protected:
 
   bool generate_new_map;
 
-  void post_turn();
+  virtual void post_turn();
 
+  virtual void render_map() = 0;
+  virtual void render_hud() = 0;
+  void render_entities();
+
+  int level;
   uint64_t seed;
 
   std::deque<input_event_t> input;
   std::vector<entity_t *> entities;
   std::unique_ptr<map_generator_t> generator;
-  std::unique_ptr<buffer2d_t> map;
+  std::unique_ptr<buffer2d_u8_t> map;
   std::unique_ptr<console_t> console;
   std::unique_ptr<pfield_t> pfield;
   std::unique_ptr<bitset2d_t> fog;
+  std::unique_ptr<bitset2d_t> walls;
 };
 
 } // namespace librl

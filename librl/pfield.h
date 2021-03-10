@@ -1,30 +1,33 @@
 #pragma once
 #include "buffer2d.h"
+#include "bitset2d.h"
 
 namespace librl {
 
 struct pfield_t {
 
-  pfield_t(buffer2d_t &m, uint8_t tile)
-    : wall_tile(tile)
+  typedef buffer2d_t<uint8_t> buffer_t;
+
+  pfield_t(buffer_t &m, const bitset2d_t &walls)
+    : walls(walls)
     , map(m)
     , state(0)
-    , a(new buffer2d_t(m.width, m.height))
-    , b(new buffer2d_t(m.width, m.height))
+    , a(new buffer_t(m.width, m.height))
+    , b(new buffer_t(m.width, m.height))
   {
     a->clear(0);
     b->clear(0);
   }
 
-  const buffer2d_t &read() const {
+  const buffer_t &read() const {
     return *(state ? a : b);
   }
 
-  buffer2d_t &read() {
+  buffer_t &read() {
     return *(state ? a : b);
   }
 
-  buffer2d_t &write() {
+  buffer_t &write() {
     return *(state ? b : a);
   }
 
@@ -36,14 +39,14 @@ struct pfield_t {
 
 protected:
 
-  const uint8_t wall_tile;
+  const bitset2d_t &walls;
 
   uint8_t sample(uint32_t x, uint32_t y) const;
 
-  buffer2d_t &map;
+  buffer_t &map;
   uint32_t state;
-  std::unique_ptr<buffer2d_t> a;
-  std::unique_ptr<buffer2d_t> b;
+  std::unique_ptr<buffer_t> a;
+  std::unique_ptr<buffer_t> b;
 };
 
 }  // namespace librl

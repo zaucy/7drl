@@ -7,10 +7,15 @@ namespace librl {
 struct console_t {
 
   console_t(uint32_t w, uint32_t h)
-    : chars(w, h)
+    : attrib(w, h)
+    , chars(w, h)
+    , width(w)
+    , height(h)
     , caret{0, 0}
   {
     window_reset();
+    chars.clear(' ');
+    attrib.clear(0x33f080);
   }
 
   void render(uint32_t *dst, uint32_t pitch, uint32_t chars_x,
@@ -24,6 +29,12 @@ struct console_t {
     }
   }
 
+  void fill(const int2 &min, const int2 &max, char ch);
+
+  void fill(char ch);
+
+  void print(const char *fmt, ...);
+
   void window_set(const int2 &wmin, const int2 &wmax);
 
   void window_reset();
@@ -36,7 +47,10 @@ struct console_t {
     return caret;
   }
 
-  buffer2d_t chars;
+  buffer2d_u32_t attrib;
+  buffer2d_u8_t chars;
+  const int width;
+  const int height;
 
 protected:
   // scroll the window up one row

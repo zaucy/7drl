@@ -38,6 +38,9 @@ struct program_t {
     if (!screen) {
       return false;
     }
+
+    SDL_WM_SetCaption("TinyRL", nullptr);
+
     active = true;
     width = w;
     height = h;
@@ -47,6 +50,9 @@ struct program_t {
   }
 
   void on_event(const SDL_Event &event) {
+
+    using namespace librl;
+
     switch (event.type) {
     case SDL_QUIT:
       active = false;
@@ -58,7 +64,7 @@ struct program_t {
         active = false;
         break;
       case SDLK_SPACE:
-        game.map_create(width / 8, height / 8);
+        game.map_next();
         break;
       }
 
@@ -66,13 +72,18 @@ struct program_t {
         return;
       }
       switch (event.key.keysym.sym) {
-      case SDLK_LEFT:  game.input_event_push(librl::input_event_t{ librl::input_event_t::key_left  }); break;
-      case SDLK_RIGHT: game.input_event_push(librl::input_event_t{ librl::input_event_t::key_right }); break;
-      case SDLK_UP:    game.input_event_push(librl::input_event_t{ librl::input_event_t::key_up    }); break;
-      case SDLK_DOWN:  game.input_event_push(librl::input_event_t{ librl::input_event_t::key_down  }); break;
+      case SDLK_LEFT:  game.input_event_push(input_event_t{ input_event_t::key_left  }); break;
+      case SDLK_RIGHT: game.input_event_push(input_event_t{ input_event_t::key_right }); break;
+      case SDLK_UP:    game.input_event_push(input_event_t{ input_event_t::key_up    }); break;
+      case SDLK_DOWN:  game.input_event_push(input_event_t{ input_event_t::key_down  }); break;
       }
       break;
     case SDL_MOUSEBUTTONUP:
+      game.input_event_push(input_event_t{
+        (event.button.button == 0) ? input_event_t::mouse_lmb : input_event_t::mouse_rmb,
+        event.button.x / 8,
+        event.button.y / 8
+        });
       break;
     }
   }
@@ -100,7 +111,7 @@ struct program_t {
   void render_x1() {
     assert(screen);
     uint32_t *d0 = (uint32_t*)screen->pixels;
-    const uint32_t pitch = width * 2;
+    const uint32_t pitch = width;
     game.console_get().render(d0, pitch, width / 8, height / 8);
     SDL_Flip(screen);
   }
@@ -147,6 +158,80 @@ struct game_7drl_t : public librl::game_t {
     assert(!player);
     player = gc.alloc<ent_player_t>(*this);
   }
+
+  void post_turn() override {
+
+    if (player) {
+
+      bool on_grass = (map_get().get(player->pos) == tile_grass);
+
+      pfield->drop(player->pos.x, player->pos.y, on_grass ? 3 : 6);
+    }
+
+    game_t::post_turn();
+  }
+
+  void game_t::render_hud() {
+    using namespace librl;
+    assert(console);
+    auto &c = *console;
+
+    assert(player && player->is_type<ent_player_t>());
+    ent_player_t *p = static_cast<ent_player_t*>(player);
+
+    console->fill(int2{ 0, c.height - 1 }, int2{ c.width, c.height }, ' ');
+
+    console->caret_set(int2{ 0, c.height - 1 });
+    console->print("level: %d  ", level);
+
+    console->caret_set(int2{ 10, c.height - 1 });
+    console->print("hp: %d  ", p->hp);
+
+    console->caret_set(int2{ 20, c.height - 1 });
+    console->print("gold: %d  ", p->gold);
+  }
+
+  void render_map() override {
+    using namespace librl;
+    assert(map && console && walls);
+    auto &m = *map;
+    auto &c = *console;
+
+    const int32_t px = player->pos.x;
+    const int32_t py = player->pos.y;
+
+    static const std::array<char, 128> ramp = {
+      '.', '#', '"', '?'
+    };
+
+    static const std::array<uint32_t, 128> rgb = {
+      0xfac4d1, 0xfac4d1, 0xbad4b1, 0xfac4d1
+    };
+
+    for (uint32_t y = 0; y < m.height; ++y) {
+      for (uint32_t x = 0; x < m.width; ++x) {
+        auto &cell = m.get(x, y);
+
+        uint8_t &ch = c.chars.get(x, y);
+
+        uint32_t clr = rgb[cell];
+        ch = ramp[cell];
+        const int2 p = int2{ int32_t(x), int32_t(y) };
+
+        const bool seen = raycast(player->pos, p, *walls);
+        if (seen) {
+          c.attrib.get(x, y) = clr;
+          fog->set(int2{ int(x), int(y) });
+        }
+        else {
+          c.attrib.get(x, y) = (clr >> 2) & 0x3f3f3f;
+          if (!fog->get(p)) {
+            ch = ' ';
+          }
+        }
+      }
+    }
+  }
 };
 
 } // namespace game
@@ -158,11 +243,11 @@ int main(int argc, char *args[]) {
   program_t prog{ game };
 
   if (!prog.init(game::screen_width,
-                 game::screen_height, 2)) {
+                 game::screen_height, 1)) {
     return 1;
   }
 
-  game.map_create(prog.width / 8, prog.height / 8);
+  game.map_create(prog.width / 8, (prog.height / 8) - 2);
 
   while (prog.active) {
     prog.tick();

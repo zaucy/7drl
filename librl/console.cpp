@@ -1,3 +1,6 @@
+#include <cstdarg>
+#include <array>
+
 #include "console.h"
 #include "font.h"
 #include "common.h"
@@ -5,11 +8,11 @@
 namespace librl {
 
 void console_t::render(uint32_t *dst, uint32_t pitch, uint32_t chars_x, uint32_t chars_y) {
-  const uint32_t fg = 0x33f080;
-  const uint32_t bg = 0x202020;
   for (uint32_t y = 0; y < chars_y; ++y) {
     for (uint32_t x = 0; x < chars_x; ++x) {
-      const buffer2d_t::type_t ch = chars.get(x, y);
+      const uint32_t bg = 0x202020;
+      const uint32_t fg = attrib.get(x, y);
+      const buffer2d_u8_t::type ch = chars.get(x, y);
       font_draw_glyph_8x8(dst + x * 8, pitch, ch, fg, bg);
     }
     dst += pitch * 8;
@@ -74,6 +77,32 @@ void console_t::window_clear() {
   for (int32_t y = window_min.y; y < window_max.y; ++y) {
     for (int32_t x = window_min.x; x < window_max.x; ++x) {
       chars.get(x, y) = ' ';
+    }
+  }
+}
+
+void console_t::print(const char *fmt, ...) {
+  std::array<char, 1024> temp;
+  va_list args;
+  va_start(args, fmt);
+  vsnprintf(temp.data(), temp.size(), fmt, args);
+  va_end(args);
+  temp.back() = '\0';
+  puts(temp.data());
+}
+
+void console_t::fill(const int2 &min, const int2 &max, char ch) {
+  for (int y = min.y; y < max.y; ++y) {
+    for (int x = min.x; x < max.x; ++x) {
+      chars.get(x, y) = ch;
+    }
+  }
+}
+
+void console_t::fill(char ch) {
+  for (int y = 0; y < height; ++y) {
+    for (int x = 0; x < width; ++x) {
+      chars.get(x, y) = ch;
     }
   }
 }

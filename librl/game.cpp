@@ -4,6 +4,7 @@
 
 #include "game.h"
 #include "raycast.h"
+#include "perlin.h"
 
 namespace librl {
 
@@ -36,9 +37,6 @@ void game_t::tick() {
 }
 
 void game_t::post_turn() {
-  if (player) {
-    pfield->drop(player->pos.x, player->pos.y, 5);
-  }
   // update the potential field
   assert(pfield);
   pfield->update();
@@ -64,50 +62,37 @@ void game_t::post_turn() {
   render();
 }
 
-void game_t::render() {
-  assert(map && console);
-  auto &m = *map;
-  auto &c = *console;
-
-  if (!player) {
-    return;
-  }
-
-  const int32_t px = player->pos.x;
-  const int32_t py = player->pos.y;
-
-  for (uint32_t y = 0; y < m.height; ++y) {
-    for (uint32_t x = 0; x < m.width; ++x) {
-      auto &cell = m.get(x, y);
-#if 1
-      // XXX: dont do this in the librl
-      char ch = (cell == 0) ? '.' : '#';
-      const int2 p = int2{ int32_t(x), int32_t(y) };
-
-      const bool seen = raycast(player->pos, p, 1, m);
-      if (seen) {
-        fog->set(p);
-      }
-      else {
-        if (!fog->get(p)) {
-          ch = ' ';
-        }
-        else {
-          ch = (cell == 0) ? ' ' : ch;
-        }
-      }
-      c.chars.get(x, y) = ch;
-#else
-      c.chars.get(x, y) = '0' + pfield->read().get(x, y);
-#endif
-    }
-  }
-
-  // update entities
+void game_t::render_entities() {
   for (auto &e : entities) {
     assert(e);
     e->render();
   }
+}
+
+void game_t::map_create(uint32_t w, uint32_t h) {
+  // clear the old map entities entirely
+  entities.clear();
+  // create various maps and arrays
+  fog.reset(new bitset2d_t(w, h));
+  walls.reset(new bitset2d_t(w, h));
+  map.reset(new buffer2d_u8_t(w, h));
+  // run the map generator
+  if (generator) {
+    generator->generate();
+  }
+  // create a potential field
+  assert(walls);
+  pfield.reset(new pfield_t(*map, *walls));
+  render();
+}
+
+void game_t::render() {
+  if (!player) {
+    return;
+  }
+  render_map();
+  render_entities();
+  render_hud();
 }
 
 entity_t *game_t::entity_find(const int2 &p) const {
@@ -120,13 +105,19 @@ entity_t *game_t::entity_find(const int2 &p) const {
 }
 
 void game_t::message_post(const char *str, ...) {
-  std::array<char, 1024> buf;
+  assert(console);
+  auto &c = *console;
+
+  std::array<char, 1024> temp;
   va_list args;
   va_start(args, str);
-  vsnprintf(buf.data(), buf.size(), str, args);
+  vsnprintf(temp.data(), temp.size(), str, args);
   va_end(args);
-  buf.back() = '\0';
-  printf("%s\n", buf.data());
+  temp.back() = '\0';
+
+  c.fill(int2{ 0, c.height - 2 }, int2{ c.width, c.height - 1 }, ' ');
+  c.caret_set(int2{ 0, c.height - 2 });
+  c.puts(temp.data());
 }
 
 }  // namespace librl
