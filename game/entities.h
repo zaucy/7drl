@@ -32,33 +32,36 @@ struct ent_player_t : public librl::entity_actor_t {
     con.chars.get(pos.x, pos.y) = '@';
   }
 
+  void kill() override;
+
   void interact_with(entity_t *e);
 
   bool turn() override;
 
   void _enumerate(librl::gc_enum_t &func) override;
 
+  void on_give_damage(int32_t damage, entity_t *to) override;
+
   uint32_t gold;
+  uint32_t xp;
   librl::int2 user_dir;
 };
 
-struct ent_goblin_t : public librl::entity_actor_t {
+struct ent_enemy_t : public librl::entity_actor_t {
 
-  static const uint32_t TYPE = ent_type_goblin;
-
-  ent_goblin_t(librl::game_t &game)
-    : librl::entity_actor_t(TYPE, game)
+  ent_enemy_t(uint32_t type, librl::game_t &game)
+    : librl::entity_actor_t(type, game)
     , seed(game.random())
   {
-    name = "goblin";
-    hp = 30;
+    accuracy = 0;
+    damage = 0;
+    defense = 0;
+    evasion = 0;
+    crit = 0;
+    colour = 0xFF00FF;
+    glyph = '£';
+    sense = 250;
   }
-
-  int32_t get_accuracy() const override { return 40; }
-  int32_t get_damage() const   override { return 10; }
-  int32_t get_defense() const  override { return 0;  }
-  int32_t get_evasion() const  override { return 0;  }
-  int32_t get_crit() const     override { return 0;  }
 
   void render() override {
     auto &con = game.console_get();
@@ -66,8 +69,8 @@ struct ent_goblin_t : public librl::entity_actor_t {
       return;
     }
     if (librl::raycast(game.player->pos, pos, game.walls_get())) {
-      con.attrib.get(pos.x, pos.y) = colour_goblin;
-      con.chars.get(pos.x, pos.y) = 'g';
+      con.attrib.get(pos.x, pos.y) = colour;
+      con.chars.get(pos.x, pos.y) = glyph;
     }
   }
 
@@ -75,7 +78,289 @@ struct ent_goblin_t : public librl::entity_actor_t {
 
   bool turn() override;
 
+  bool move_random();
+  bool move_pfield(int dir = 1);
+
+  int32_t get_accuracy() const override { return accuracy; }
+  int32_t get_damage() const   override { return damage; }
+  int32_t get_defense() const  override { return defense; }
+  int32_t get_evasion() const  override { return evasion; }
+  int32_t get_crit() const     override { return crit; }
+
+  int32_t accuracy;
+  int32_t damage;
+  int32_t defense;
+  int32_t evasion;
+  int32_t crit;
+
+  uint8_t sense;
+
+  uint32_t colour;
+  char glyph;
+
   uint64_t seed;
+};
+
+struct ent_goblin_t : public ent_enemy_t {
+
+  static const uint32_t TYPE = ent_type_goblin;
+
+  ent_goblin_t(librl::game_t &game)
+    : ent_enemy_t(TYPE, game)
+  {
+    name = "goblin";
+    hp = 30;
+    accuracy = 40;
+    damage = 8;
+    glyph = 'g';
+    colour = colour_goblin;
+  }
+};
+
+struct ent_vampire_t : public ent_enemy_t {
+
+  static const uint32_t TYPE = ent_type_vampire;
+
+  ent_vampire_t(librl::game_t &game)
+    : ent_enemy_t(TYPE, game)
+  {
+    name = "vampire";
+    hp = 50;
+    accuracy = 75;
+    damage = 15;
+    glyph = 'v';
+    colour = colour_vampire;
+    sense = 245;
+  }
+
+  bool turn() override {
+    hp += hp >= 50 ? 0 : 2;
+    if (move_pfield(hp <= 15 ? -1 : 1)) {
+      return true;
+    }
+    if (move_random()) {
+      return true;
+    }
+    return true;
+  }
+
+  void on_give_damage(int32_t damage, entity_t *) override {
+    damage /= 2;
+    game.message_post("%s leeched %d hp", name.c_str(), damage);
+    hp += damage;
+  }
+};
+
+struct ent_ogre_t : public ent_enemy_t {
+
+  static const uint32_t TYPE = ent_type_ogre;
+
+  ent_ogre_t(librl::game_t &game)
+    : ent_enemy_t(TYPE, game)
+  {
+    name = "ogre";
+    hp = 170;
+    accuracy = 75;
+    damage = 16;
+    glyph = 'o';
+    colour = colour_ogre;
+    sense = 245;
+  }
+
+  bool turn() override {
+
+    // smash if too close
+
+    return ent_enemy_t::turn();
+  }
+};
+
+struct ent_wrath_t : public ent_enemy_t {
+
+  static const uint32_t TYPE = ent_type_wrath;
+
+  ent_wrath_t(librl::game_t &game)
+    : ent_enemy_t(TYPE, game)
+    , timer(2)
+  {
+    name = "wrath";
+    hp = 75;
+    accuracy = 90;
+    damage = 15;
+    glyph = 'w';
+    colour = colour_wrath;
+    sense = 245;
+  }
+
+  void teleport_to_pos(const librl::int2 &p);
+
+  bool turn() override {
+    using namespace librl;
+    if (game.player) {
+      const auto &pp = game.player->pos;
+      if (raycast(pp, pos, game.walls_get())) {
+        --timer;
+      }
+      if (timer <= 0) {
+        timer = 2;
+        const int32_t dx = int32_t(pp.x) - int32_t(pos.x);
+        const int32_t dy = int32_t(pp.y) - int32_t(pos.y);
+        const int32_t dist = dx * dx + dy * dy;
+        if (dist > 5) {
+          teleport_to_pos(pp);
+          return true;
+        }
+      }
+    }
+    return ent_enemy_t::turn();
+  }
+
+  int timer;
+};
+
+struct ent_dwarf_t : public ent_enemy_t {
+
+  static const uint32_t TYPE = ent_type_dwarf;
+
+  ent_dwarf_t(librl::game_t &game)
+    : ent_enemy_t(TYPE, game)
+  {
+    name = "dwarf";
+    hp = 80;
+    accuracy = 75;
+    damage = 20;
+    glyph = 'd';
+    colour = colour_dwarf;
+    sense = 248;
+  }
+
+  bool turn() override {
+    using namespace librl;
+    if (game.player) {
+      // head straight for the player if close enough
+      const auto &pp = game.player->pos;
+      const int32_t dx = int32_t(pp.x) - int32_t(pos.x);
+      const int32_t dy = int32_t(pp.y) - int32_t(pos.y);
+      const int32_t dist = dx * dx + dy * dy;
+      if (dist >= 1 && dist <= 8) {
+        const int2 d = {
+          abs(dx) > abs(dy) ? sign(dx) : 0,
+          abs(dx) > abs(dy) ? 0 : sign(dy)
+        };
+        const int2 np{ pos.x + d.x, pos.y + d.y };
+        // smash the wall down
+        if (game.walls_get().get(np)) {
+          game.walls_get().clear(np);
+          game.map_get().get(np) = '.';
+        }
+        if (entity_t *e = game.entity_find(np)) {
+          interact_with(e);
+          return true;
+        }
+        else {
+          pos = np;
+          return true;
+        }
+      }
+    }
+    return ent_enemy_t::turn();
+  }
+};
+
+struct ent_warlock_t : public ent_enemy_t {
+
+  static const uint32_t TYPE = ent_type_warlock;
+
+  static const uint32_t spawn_time = 10;
+
+  ent_warlock_t(librl::game_t &game)
+    : ent_enemy_t(TYPE, game)
+    , timer(spawn_time / 2)
+  {
+    name = "warlock";
+    hp = 25;
+    accuracy = 50;
+    damage = 5;
+    glyph = 'W';
+    colour = colour_warlock;
+    sense = 250;
+  }
+
+  void spawn_skeleton();
+
+  bool turn() {
+    using namespace librl;
+    if (!game.player) {
+      return true;
+    }
+    const int2 &x = game.player->pos;
+    if (raycast(x, pos, game.walls_get())) {
+      if (timer-- == 0) {
+        timer = spawn_time;
+        spawn_skeleton();
+      }
+    }
+    else {
+      timer = spawn_time;
+    }
+    if (move_pfield(-1)) {
+      return true;
+    }
+    if (move_random()) {
+      return true;
+    }
+    // skip turn
+    return true;
+  }
+
+  uint32_t timer;
+};
+
+struct ent_skeleton_t : public ent_enemy_t {
+
+  static const uint32_t TYPE = ent_type_mimic;
+
+  ent_skeleton_t(librl::game_t &game)
+    : ent_enemy_t(TYPE, game)
+  {
+    name = "skeleton";
+    hp = 80;
+    accuracy = 75;
+    damage = 20;
+    glyph = 's';
+    sense = 240;
+    colour = colour_skeleton;
+  }
+};
+
+struct ent_mimic_t : public ent_enemy_t {
+
+  static const uint32_t TYPE = ent_type_mimic;
+
+  ent_mimic_t(librl::game_t &game)
+    : ent_enemy_t(TYPE, game)
+    , trigger(false)
+  {
+    name = "mimic";
+    hp = 200;
+    accuracy = 75;
+    damage = 15;
+    glyph = '?';
+    colour = colour_item;
+  }
+
+  bool turn() override {
+    if (trigger) {
+      return ent_enemy_t::turn();
+    }
+    return true;
+  }
+
+  void on_take_damage(int32_t damage, entity_t *) override {
+    trigger = true;
+  }
+
+  bool trigger;
 };
 
 struct ent_potion_t : public librl::entity_item_t {
@@ -85,7 +370,6 @@ struct ent_potion_t : public librl::entity_item_t {
   ent_potion_t(librl::game_t &game)
     : librl::entity_item_t(TYPE, game, /* can_pickup */ true)
     , recovery(20)
-    , seed(game.random())
   {
     name = "potion";
   }
@@ -102,15 +386,19 @@ struct ent_potion_t : public librl::entity_item_t {
   }
 
   void use_on(entity_t *e) {
-    if (e->is_type<ent_player_t>()) {
-      game.message_post("%s used %s to recover %u hp", e->name.c_str(),
-          name.c_str(), recovery);
-      static_cast<ent_player_t*>(e)->hp += recovery;
-    }
+    using namespace librl;
+
+    entity_actor_t *act = e->as_a<entity_actor_t>();
+    assert(act);
+
+    const int32_t before = act->hp;
+    act->hp = min<int32_t>(act->hp_max, act->hp + recovery);
+    const int32_t diff = act->hp - before;
+    game.message_post("%s used %s to recover %u hp", e->name.c_str(),
+        name.c_str(), diff);
   }
 
   const uint32_t recovery;
-  uint64_t seed;
 };
 
 struct ent_stairs_t : public librl::entity_item_t {
@@ -121,7 +409,6 @@ struct ent_stairs_t : public librl::entity_item_t {
 
   ent_stairs_t(librl::game_t &game)
     : librl::entity_item_t(TYPE, game, /* can_pickup */ false)
-    , seed(game.random())
   {
     name = "stairs";
   }
@@ -143,8 +430,6 @@ struct ent_stairs_t : public librl::entity_item_t {
       game.map_next();
     }
   }
-
-  uint64_t seed;
 };
 
 struct ent_gold_t : public librl::entity_item_t {
@@ -186,10 +471,10 @@ struct ent_club_t : public librl::entity_equip_t {
 
   ent_club_t(librl::game_t &game)
     : librl::entity_equip_t(TYPE, game)
-    , seed(game.random())
   {
     name = "club";
-    damage = 5;
+    damage = 4;
+    evasion = -1;
   }
 
   void render() override {
@@ -198,12 +483,10 @@ struct ent_club_t : public librl::entity_equip_t {
       return;
     }
     if (librl::raycast(game.player->pos, pos, 0x1, game.map_get())) {
-      con.attrib.get(pos.x, pos.y) = colour_sword;
-      con.chars.get(pos.x, pos.y) = 'c';
+      con.attrib.get(pos.x, pos.y) = colour_item;
+      con.chars.get(pos.x, pos.y) = '?';
     }
   }
-
-  uint64_t seed;
 };
 
 struct ent_mace_t : public librl::entity_equip_t {
@@ -212,9 +495,32 @@ struct ent_mace_t : public librl::entity_equip_t {
 
   ent_mace_t(librl::game_t &game)
     : librl::entity_equip_t(TYPE, game)
-    , seed(game.random())
   {
     name = "mace";
+    damage = 6;
+    evasion = -1;
+  }
+
+  void render() override {
+    auto &con = game.console_get();
+    if (!game.player) {
+      return;
+    }
+    if (librl::raycast(game.player->pos, pos, 0x1, game.map_get())) {
+      con.attrib.get(pos.x, pos.y) = colour_item;
+      con.chars.get(pos.x, pos.y) = '?';
+    }
+  }
+};
+
+struct ent_sword_t : public librl::entity_equip_t {
+
+  static const uint32_t TYPE = ent_type_sword;
+
+  ent_sword_t(librl::game_t &game)
+    : librl::entity_equip_t(TYPE, game)
+  {
+    name = "sword";
     damage = 8;
   }
 
@@ -224,24 +530,22 @@ struct ent_mace_t : public librl::entity_equip_t {
       return;
     }
     if (librl::raycast(game.player->pos, pos, 0x1, game.map_get())) {
-      con.attrib.get(pos.x, pos.y) = colour_sword;
-      con.chars.get(pos.x, pos.y) = 'm';
+      con.attrib.get(pos.x, pos.y) = colour_item;
+      con.chars.get(pos.x, pos.y) = '?';
     }
   }
-
-  uint64_t seed;
 };
 
-struct ent_sword_t : public librl::entity_equip_t {
+struct ent_dagger_t : public librl::entity_equip_t {
 
-  static const uint32_t TYPE = ent_type_sword;
+  static const uint32_t TYPE = ent_type_dagger;
 
-  ent_sword_t(librl::game_t &game)
+  ent_dagger_t(librl::game_t &game)
     : librl::entity_equip_t(TYPE, game)
-    , seed(game.random())
   {
-    name = "sword";
-    damage = 10;
+    name = "dagger";
+    damage = 6;
+    evasion = 2;;
   }
 
   void render() override {
@@ -250,16 +554,105 @@ struct ent_sword_t : public librl::entity_equip_t {
       return;
     }
     if (librl::raycast(game.player->pos, pos, 0x1, game.map_get())) {
-      con.attrib.get(pos.x, pos.y) = colour_sword;
-      con.chars.get(pos.x, pos.y) = 's';
+      con.attrib.get(pos.x, pos.y) = colour_item;
+      con.chars.get(pos.x, pos.y) = '?';
     }
   }
+};
 
-  void use_on(entity_t *e) {
-    // ?
+struct ent_leather_armour_t : public librl::entity_equip_t {
+
+  static const uint32_t TYPE = ent_type_leather_armour;
+
+  ent_leather_armour_t(librl::game_t &game)
+    : librl::entity_equip_t(TYPE, game)
+  {
+    name = "leather armour";
+    defense = 4;
   }
 
-  uint64_t seed;
+  void render() override {
+    auto &con = game.console_get();
+    if (!game.player) {
+      return;
+    }
+    if (librl::raycast(game.player->pos, pos, 0x1, game.map_get())) {
+      con.attrib.get(pos.x, pos.y) = colour_item;
+      con.chars.get(pos.x, pos.y) = '?';
+    }
+  }
+};
+
+struct ent_shield_t : public librl::entity_equip_t {
+
+  static const uint32_t TYPE = ent_type_shield;
+
+  ent_shield_t(librl::game_t &game)
+    : librl::entity_equip_t(TYPE, game)
+  {
+    name = "shield";
+    defense = 3;
+    evasion = 2;
+  }
+
+  void render() override {
+    auto &con = game.console_get();
+    if (!game.player) {
+      return;
+    }
+    if (librl::raycast(game.player->pos, pos, 0x1, game.map_get())) {
+      con.attrib.get(pos.x, pos.y) = colour_item;
+      con.chars.get(pos.x, pos.y) = '?';
+    }
+  }
+};
+
+struct ent_metal_armour_t : public librl::entity_equip_t {
+
+  static const uint32_t TYPE = ent_type_leather_armour;
+
+  ent_metal_armour_t(librl::game_t &game)
+    : librl::entity_equip_t(TYPE, game)
+  {
+    name = "leather armour";
+    defense = 6;
+    evasion = -1;
+  }
+
+  void render() override {
+    auto &con = game.console_get();
+    if (!game.player) {
+      return;
+    }
+    if (librl::raycast(game.player->pos, pos, 0x1, game.map_get())) {
+      con.attrib.get(pos.x, pos.y) = colour_item;
+      con.chars.get(pos.x, pos.y) = '?';
+    }
+  }
+};
+
+struct ent_cloak_t : public librl::entity_equip_t {
+
+  static const uint32_t TYPE = ent_type_leather_armour;
+
+  ent_cloak_t(librl::game_t &game)
+    : librl::entity_equip_t(TYPE, game)
+  {
+    name = "cloak";
+    defense = 3;
+    evasion = 2;
+  }
+
+  void render() override {
+    auto &con = game.console_get();
+    if (!game.player) {
+      return;
+    }
+    if (librl::raycast(game.player->pos, pos, 0x1, game.map_get())) {
+      con.attrib.get(pos.x, pos.y) = colour_item;
+      con.chars.get(pos.x, pos.y) = '?';
+    }
+  }
 };
 
 }  // game

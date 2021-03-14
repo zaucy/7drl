@@ -19,8 +19,7 @@ enum subclass_t {
 struct entity_t : librl::gc_base_t {
 
   entity_t(const uint32_t type, const uint32_t subclass, game_t &game)
-    : order(0)
-    , pos(int2{-1, -1})
+    : pos(int2{-1, -1})
     , type(type)
     , subclass(subclass)
     , game(game)
@@ -34,6 +33,18 @@ struct entity_t : librl::gc_base_t {
   virtual bool turn() = 0;
 
   template <typename type_t>
+  type_t* as_a() {
+    return (subclass == type_t::SUBCLASS || type == type_t::TYPE)
+      ? static_cast<type_t*>(this) : nullptr;
+  }
+
+  template <typename type_t>
+  const type_t* as_a() const {
+    return (subclass == type_t::SUBCLASS || type == type_t::TYPE)
+      ? static_cast<const type_t*>(this) : nullptr;
+  }
+
+  template <typename type_t>
   bool is_type() const {
     return type_t::TYPE == type;
   }
@@ -43,7 +54,6 @@ struct entity_t : librl::gc_base_t {
     return type_t::SUBCLASS == subclass;
   }
 
-  uint64_t order;
   int2 pos;
   const uint32_t type;
   const uint32_t subclass;
@@ -56,9 +66,12 @@ protected:
 struct entity_actor_t : public entity_t {
 
   static const subclass_t SUBCLASS = ent_subclass_actor;
+  static const uint32_t TYPE = -1;
 
   entity_actor_t(const uint32_t type, game_t &game)
     : entity_t(type, SUBCLASS, game)
+    , hp(0)
+    , hp_max(0)
   {
   }
 
@@ -72,13 +85,18 @@ struct entity_actor_t : public entity_t {
 
   virtual void kill();
 
+  virtual void on_take_damage(int32_t damage, entity_t *from) {};
+  virtual void on_give_damage(int32_t damage, entity_t *to) {};
+
   int32_t hp;
+  int32_t hp_max;
   inventory_t inventory;
 };
 
 struct entity_item_t : public entity_t {
 
   static const subclass_t SUBCLASS = ent_subclass_item;
+  static const uint32_t TYPE = -1;
 
   entity_item_t(const uint32_t type, game_t &game, bool can_pickup)
     : entity_t(type, SUBCLASS, game)
@@ -100,6 +118,7 @@ struct entity_item_t : public entity_t {
 struct entity_equip_t : public entity_t {
 
   static const subclass_t SUBCLASS = ent_subclass_equip;
+  static const uint32_t TYPE = -1;
 
   entity_equip_t(const uint32_t type, game_t &game)
     : entity_t(type, SUBCLASS, game)
