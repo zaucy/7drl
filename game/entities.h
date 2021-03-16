@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdio>
+#include <string>
 
 // librl
 #include "gc.h"
