@@ -41,13 +41,14 @@ enum {
   ent_type_dagger,
   ent_type_leather_armour,
   ent_type_metal_armour,
-  ent_type_cloak_armour,
+  ent_type_cloak,
   ent_type_shield,
 };
 
 enum {
-  screen_width  = 512,
-  screen_height = 512,
+  screen_width  = 640,
+  screen_height = 480,
+  screen_scale  = 1,
 };
 
 enum {
